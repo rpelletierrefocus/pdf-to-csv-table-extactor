@@ -6,3 +6,5 @@ ply==3.11
 pytesseract==0.2.6
 scipy==1.2.0
 six==1.12.0
+pdf2image==1.12.1
+opencv-python==3.4.4.19
