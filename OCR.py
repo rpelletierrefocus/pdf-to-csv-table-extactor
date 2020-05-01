@@ -14,24 +14,28 @@ import PIL
 import io
 from PIL import ExifTags
 from pdf2image import convert_from_path
+import os
 
-
-DEBUG = False
+DEBUG = lambda: None
+if os.name == 'nt':
+    pytesseract.pytesseract.tesseract_cmd = './tesseract/tesseract'
+    print(pytesseract.pytesseract.tesseract_cmd)
+DEBUG.isDebug = False
 ROW_MIN_HEIGHT = 5  # in px
 COLUMN_MIN_WIDTH = 5
 PADDING = 2
 
+def setDebug(debug):
+    DEBUG.isDebug = debug
+
 
 def PDFTOImage(filePath, outPath):
-    page = convert_from_path(filePath)
+    poppler_path = None
+    if os.name == 'nt':
+        poppler_path= './poppler/bin'
+    page = convert_from_path(filePath,  poppler_path=poppler_path)
     page[0].save(outPath, 'JPEG')
     return outPath
-# doc = fitz.open(filePath)
-# page = doc.loadPage(0)  # number of page
-# pix = page.getPixmap()
-# output = "outfile.png"
-# pix.writePNG(outPath)
-# return outPath
 
 
 def resizeImageIfRequired(imageFile):
@@ -56,33 +60,23 @@ def resizeImageIfRequired(imageFile):
     except Exception as e:
         print("err:", e)
 
-    # print(img, img.size[1])
-    # if (img.size[1] > basewidth):
-    #     wpercent = (basewidth/float(img.size[1]))
-    #     hsize = int((float(img.size[0])*float(wpercent)))
-    #     img = img.resize((basewidth, hsize))
-    # img.save('sompic.jpg')
     return img
 
 
 def process_file(filename, outPath):
     im = resizeImageIfRequired(open(filename, 'rb'))
     # imageFile = open(filename, 'rb')
-    with open(outPath + '.csv', 'w') as csvfile:
+    with open(outPath + '.csv', 'w', encoding="utf-8") as csvfile:
         csv_writer = csv.writer(csvfile, delimiter=',',
                                 quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        # im = PIL.Image.open(imageFile)
-        # im = im.rotate(90)
-        # im.show()
-        # image.show()
-        # im = page.images[0].as_pil()  # requires
         im = im.convert('L')  # validate grayscale
-        # im.show()
+        if DEBUG.isDebug:
+            im.show()
         gray_image = np.array(im)
-        # gray_image.show()
+       
         config = ("-l ron --oem 1 --psm 6")
         extracted_table = extract_main_table(gray_image)
-        if DEBUG:
+        if DEBUG.isDebug:
             show_wait_destroy("extracted", extracted_table)
         row_images = extract_rows_columns(extracted_table)  # [1:]
         if len(row_images) == 0:
@@ -91,12 +85,17 @@ def process_file(filename, outPath):
         idx = 0
         for row in row_images:
             idx += 1
-            print("%s : Extracting row %d out of %d page %d" %
-                  (outPath, idx, len(row_images), 1))
+            print("%s : Extracting row %d out of %d file %s" %
+                  (outPath, idx, len(row_images), filename))
             row_texts = []
             for column in row:
-                text = pytesseract.image_to_string(column, config=config)
-                row_texts.append(text)
+                try:
+                    text = pytesseract.image_to_string(column, config=config)
+                    row_texts.append(text)
+                except Exception as e:
+                    print("err:", e)
+                    row_texts.append("")
+                    continue
 
             csv_writer.writerow(row_texts)
 
@@ -108,11 +107,9 @@ def extract_main_table(gray_image):
     thresholded = cv2.threshold(blurred, 0, 255,
                                 cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
 
-    # if DEBUG:
-    # show_wait_destroy("thresholded", thresholded)
+    if DEBUG.isDebug:
+        show_wait_destroy("thresholded", thresholded)
 
-    # cv2.imshow("Thresh", thresholded)
-    # cv2.waitKey(0)
     cnts = cv2.findContours(thresholded.copy(), cv2.RETR_EXTERNAL,
                             cv2.CHAIN_APPROX_SIMPLE)
     cnts = cnts[1]  # if imutils.is_cv2() else cnts[1]
@@ -122,8 +119,9 @@ def extract_main_table(gray_image):
         # draw each contour on the output image with a 3px thick purple
         # outline, then display the output contours one at a time
         cv2.drawContours(output, [c], -1, (240, 0, 159), 3)
-    # cv2.imshow("Contours", output)
-    # cv2.waitKey(0)
+
+    if DEBUG.isDebug:    
+        show_wait_destroy("Contours", output)
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
     rect = cv2.minAreaRect(cnts[0])
     box = cv2.boxPoints(rect)
@@ -131,13 +129,13 @@ def extract_main_table(gray_image):
 
     extracted = four_point_transform(gray_image.copy(), box.reshape(4, 2))
 
-    # if DEBUG:
-    color_image = cv2.cvtColor(gray_image.copy(), cv2.COLOR_GRAY2BGR)
-    cv2.drawContours(color_image, [box], 0, (0, 0, 255), 2)
-    cv2.drawContours(color_image, [cnts[0]], -1, (0, 255, 0), 2)
-
-    # show_wait_destroy("thresholded", color_image)
-    # show_wait_destroy("extracted", extracted)
+    if DEBUG.isDebug:
+        color_image = cv2.cvtColor(gray_image.copy(), cv2.COLOR_GRAY2BGR)
+        cv2.drawContours(color_image, [box], 0, (0, 0, 255), 2)
+        cv2.drawContours(color_image, [cnts[0]], -1, (0, 255, 0), 2)
+        
+        show_wait_destroy("thresholded", color_image)
+        show_wait_destroy("extracted", extracted)
     return extracted
 
 
@@ -159,22 +157,26 @@ def extract_rows_columns(gray_image):
 
     thresholded = cv2.threshold(blurred, 128, 255,
                                 cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
-    # show_wait_destroy("extract_rows_columns", thresholded)
+    
+    if DEBUG.isDebug:
+        show_wait_destroy("extract_rows_columns", thresholded)
     # A verticle kernel of (1 X kernel_length), which will detect all the verticle lines from the image.
     vertical_kernel_height = math.ceil(height*0.1)
     verticle_kernel = cv2.getStructuringElement(
         cv2.MORPH_RECT, (1, vertical_kernel_height))
 
     # A horizontal kernel of (kernel_length X 1), which will help to detect all the horizontal line from the image.
-    horizontal_kernel_width = math.ceil(width*0.3)
+    horizontal_kernel_width = math.ceil(width*0.1)
     hori_kernel = cv2.getStructuringElement(
         cv2.MORPH_RECT, (horizontal_kernel_width, 1))
 
     # Morphological operation to detect vertical lines from an image
     img_temp1 = cv2.erode(thresholded, verticle_kernel, iterations=3)
-    # show_wait_destroy("extract_rows_columns", img_temp1)
+    if DEBUG.isDebug:
+        show_wait_destroy("extract_rows_columns", img_temp1)
     verticle_lines_img = cv2.dilate(img_temp1, verticle_kernel, iterations=3)
-    # show_wait_destroy("extract_rows_columns", verticle_lines_img)
+    if DEBUG.isDebug:
+        show_wait_destroy("extract_rows_columns", verticle_lines_img)
     _, vertical_contours, _ = cv2.findContours(verticle_lines_img.copy(), cv2.RETR_EXTERNAL,
                                                cv2.CHAIN_APPROX_SIMPLE)
     # Sort all the contours by top to bottom.
@@ -188,7 +190,8 @@ def extract_rows_columns(gray_image):
     img_temp2 = cv2.erode(thresholded, hori_kernel, iterations=3)
 
     horizontal_lines_img = cv2.dilate(img_temp2, hori_kernel, iterations=3)
-    # show_wait_destroy("extract_rows_columns", horizontal_lines_img)
+    if DEBUG.isDebug:
+        show_wait_destroy("extract_rows_columns", horizontal_lines_img)
     _, horizontal_contours, _ = cv2.findContours(horizontal_lines_img.copy(), cv2.RETR_EXTERNAL,
                                                  cv2.CHAIN_APPROX_SIMPLE)
 
@@ -198,7 +201,7 @@ def extract_rows_columns(gray_image):
     filtered_horizontal_bounding_boxes = list(
         filter(lambda x: horizontal_boxes_filter(x, width), horizontal_bounding_boxes))
 
-    # if DEBUG:
+    # if DEBUG.isDebug:
     color_image = cv2.cvtColor(gray_image.copy(), cv2.COLOR_GRAY2BGR)
     cv2.drawContours(color_image, vertical_contours, -1, (0, 255, 0), 2)
     cv2.drawContours(color_image, horizontal_contours, -1, (255, 0, 0), 2)
@@ -210,8 +213,8 @@ def extract_rows_columns(gray_image):
     # for filtered_vertical_bounding_box in filtered_vertical_bounding_boxes:
     #     x,y,w,h = filtered_vertical_bounding_box
     #     cv2.rectangle(color_image,(x,y),(x+w,y+h),(0,255,255),2)
-
-    # show_wait_destroy("horizontal_vertical_contours", color_image)
+    if DEBUG.isDebug:
+        show_wait_destroy("horizontal_vertical_contours", color_image)
 
     extracted_rows_columns = []
 
@@ -250,18 +253,18 @@ def extract_rows_columns(gray_image):
                 extracted, 165, 255, cv2.THRESH_BINARY)
             extracted_columns.append(extracted)
 
-            # cv2.drawContours(color_image, [contours[0]], -1, (0,255,0), 3)
+            cv2.drawContours(color_image, [contours[0]], -1, (0, 255, 0), 3)
 
         extracted_rows_columns.append(extracted_columns)
-
-    # show_wait_destroy("horizontal_lines_img",color_image)
+    if DEBUG.isDebug:
+        show_wait_destroy("horizontal_lines_img", color_image)
     return extracted_rows_columns
 
 
 def show_wait_destroy(winname, img):
     cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
     cv2.imshow(winname, img)
-    cv2.resizeWindow(winname, 1000, 800)
+    cv2.resizeWindow(winname, 500, 500)
     cv2.moveWindow(winname, 500, 0)
     cv2.waitKey(0)
     cv2.destroyWindow(winname)

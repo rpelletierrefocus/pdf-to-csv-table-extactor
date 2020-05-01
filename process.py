@@ -1,6 +1,6 @@
 import os
 import argparse
-from OCR import process_file,  PDFTOImage
+from OCR import process_file,  PDFTOImage, setDebug
 
 
 # construct the argument parser and parse the arguments
@@ -9,10 +9,14 @@ ap.add_argument("-i", "--in", type=str, nargs='+', required=True,
                 help="path to input images folder of scans")
 ap.add_argument("-o", "--out", type=str, nargs='+', required=False,
                 help="path to output images folder of result")
+ap.add_argument('-d', action='store_true')
 
 args = vars(ap.parse_args())
 file_path = args["in"][0]
 out_file_path = args["out"][0] if args["out"] is not None else "./out"
+
+if args['d']:
+    setDebug(True)
 
 try:
     os.makedirs(os.path.join(file_path, "converted"))

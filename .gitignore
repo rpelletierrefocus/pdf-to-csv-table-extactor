@@ -1,2 +1,10 @@
 *.iml
 /.idea/
+build/
+/dist
+/poppler
+/tesseract
+/process.spec
+/__Pycache__
+/images/test_images/out
+/images/test_images/converted
