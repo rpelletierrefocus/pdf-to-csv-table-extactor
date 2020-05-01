@@ -20,8 +20,14 @@ usage:
 ```
 python pdf-to-csv-cv.py -p test.pdf
 ```
-
 this will create test.pdf.csv output file
+
+build
+```
+ pyinstaller --onefile --clean .\process.py
+```
+
+this will create the single executable in dist folder, place tesserect and poppler along with executable on windows
 
 ### Algorithm
 
