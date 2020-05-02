@@ -64,7 +64,18 @@ def resizeImageIfRequired(imageFile):
 
 
 def process_file(filename, outPath):
+    config = ("-l ron --oem 1 --psm 6")
+
     im = resizeImageIfRequired(open(filename, 'rb'))
+
+    try :
+        text = pytesseract.image_to_string(im, config=config)
+        text_file = open(outPath + '.txt', 'w', encoding="utf-8")
+        n = text_file.write(text)
+        text_file.close()
+    except Exception as e:
+         print("err:", e)
+
     # imageFile = open(filename, 'rb')
     with open(outPath + '.csv', 'w', encoding="utf-8") as csvfile:
         csv_writer = csv.writer(csvfile, delimiter=',',
@@ -74,7 +85,7 @@ def process_file(filename, outPath):
             im.show()
         gray_image = np.array(im)
        
-        config = ("-l ron --oem 1 --psm 6")
+        
         extracted_table = extract_main_table(gray_image)
         if DEBUG.isDebug:
             show_wait_destroy("extracted", extracted_table)
