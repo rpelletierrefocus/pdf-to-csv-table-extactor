@@ -10,7 +10,7 @@
         "request": "launch",
         "program": "process.py",
         "console": "integratedTerminal",
-        "args": ["-i", "./images/test_images", "-o", "./images/test_images/out",]
+        "args": ["-i", "./images/test_images", "-o", "./images/test_images/out"]
       }
     ]
   }

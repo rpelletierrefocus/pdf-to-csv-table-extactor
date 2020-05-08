@@ -15,6 +15,7 @@ import io
 from PIL import ExifTags
 from pdf2image import convert_from_path
 import os
+import re
 
 DEBUG = lambda: None
 if os.name == 'nt':
@@ -37,12 +38,11 @@ def PDFTOImage(filePath, outPath):
     page[0].save(outPath, 'JPEG')
     return outPath
 
-
 def resizeImageIfRequired(imageFile):
 
     basewidth = 1969
     img = PIL.Image.open(imageFile)
-
+    angleToRotate = 0
     try:
         for orientation in ExifTags.TAGS.keys():
             if ExifTags.TAGS[orientation] == 'Orientation':
@@ -51,32 +51,39 @@ def resizeImageIfRequired(imageFile):
         exif = dict(img._getexif().items())
 
         if exif[orientation] == 3:
-            img = img.rotate(180, expand=True)
+            angleToRotate = 180
         elif exif[orientation] == 6:
-            img = img.rotate(270, expand=True)
+            angleToRotate = 270            
         elif exif[orientation] == 8:
-            img = img.rotate(90, expand=True)
+            angleToRotate = 90
 
     except Exception as e:
-        print("err:", e)
-
+        print("Image meta not found: going to use pytesseract.image_to_osd:", e)
+        try:
+            angleToRotate=360-int(re.search('(?<=Rotate: )\d+', pytesseract.image_to_osd(img)).group(0))
+        except Exception as err:
+             print(err)
+        
+    img = img.rotate(angleToRotate, expand=True)
     return img
 
-
-def process_file(filename, outPath):
-    config = ("-l ron --oem 1 --psm 6")
-
-    im = resizeImageIfRequired(open(filename, 'rb'))
-
-    try :
+def parseCompleteText(im, outPath, config, postfix=""):
+    try :   
         text = pytesseract.image_to_string(im, config=config)
-        text_file = open(outPath + '.txt', 'w', encoding="utf-8")
+        text_file = open(outPath + postfix+'.txt', 'w', encoding="utf-8")
         n = text_file.write(text)
         text_file.close()
     except Exception as e:
          print("err:", e)
 
-    # imageFile = open(filename, 'rb')
+def process_file(filename, outPath, improveBackground=False):
+    config = ("-l ron --oem 1 --psm 6")
+
+    im = resizeImageIfRequired(open(filename, 'rb'))
+    if not improveBackground:
+        parseCompleteText(im, outPath, config, "_non_blur")
+
+    imageFile = open(filename, 'rb')
     with open(outPath + '.csv', 'w', encoding="utf-8") as csvfile:
         csv_writer = csv.writer(csvfile, delimiter=',',
                                 quotechar='"', quoting=csv.QUOTE_MINIMAL)
@@ -84,9 +91,8 @@ def process_file(filename, outPath):
         if DEBUG.isDebug:
             im.show()
         gray_image = np.array(im)
-       
         
-        extracted_table = extract_main_table(gray_image)
+        extracted_table = extract_main_table(gray_image, outPath, config)
         if DEBUG.isDebug:
             show_wait_destroy("extracted", extracted_table)
         row_images = extract_rows_columns(extracted_table)  # [1:]
@@ -111,8 +117,12 @@ def process_file(filename, outPath):
             csv_writer.writerow(row_texts)
 
 
-def extract_main_table(gray_image):
+def extract_main_table(gray_image, outPath, config):
     inverted = cv2.bitwise_not(gray_image)
+    
+    if DEBUG.isDebug:
+        show_wait_destroy("inverted", inverted)
+
     blurred = cv2.GaussianBlur(inverted, (5, 5), 0)
 
     thresholded = cv2.threshold(blurred, 0, 255,
@@ -121,6 +131,11 @@ def extract_main_table(gray_image):
     if DEBUG.isDebug:
         show_wait_destroy("thresholded", thresholded)
 
+    superInverted = cv2.bitwise_not(thresholded)
+    parseCompleteText(superInverted, outPath, config)
+
+    if DEBUG.isDebug:
+        show_wait_destroy("superInverted", superInverted)
     cnts = cv2.findContours(thresholded.copy(), cv2.RETR_EXTERNAL,
                             cv2.CHAIN_APPROX_SIMPLE)
     cnts = cnts[1]  # if imutils.is_cv2() else cnts[1]

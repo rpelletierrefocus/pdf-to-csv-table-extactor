@@ -10,7 +10,8 @@ ap.add_argument("-i", "--in", type=str, nargs='+', required=True,
 ap.add_argument("-o", "--out", type=str, nargs='+', required=False,
                 help="path to output images folder of result")
 ap.add_argument('-d', action='store_true')
-
+ap.add_argument('-dci', action='store_true') 
+# don't change image
 args = vars(ap.parse_args())
 file_path = args["in"][0]
 out_file_path = args["out"][0] if args["out"] is not None else "./out"
@@ -40,7 +41,7 @@ for file_name in file_names:
                 file_path, "converted", file_name.replace('pdf', 'jpg'))
             filePath = PDFTOImage(filePath, outFilePath)
         process_file(filePath,
-                     os.path.join(out_file_path, file_name))
+                     os.path.join(out_file_path, file_name), not args['dci'])
         print(file_name)
     except Exception as e:
         print("err:", e)
